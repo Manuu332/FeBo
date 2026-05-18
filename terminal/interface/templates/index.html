@@ -4,1026 +4,615 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#050508">
-<title>FeBo Terminal v0</title>
+<title>FeBo Terminal v3</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
-
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-/* ── Reset & root ─────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg:        #050508;
-  --bg2:       #0d0d14;
-  --bg3:       #141420;
-  --border:    #1e1e2e;
-  --amber:     #f5a623;
-  --amber-dim: #9c6915;
-  --green:     #4ade80;
-  --green-dim: #1a5232;
-  --blue:      #60a5fa;
-  --red:       #f87171;
-  --muted:     #4a4a6a;
-  --text:      #d4d4e8;
-  --text-dim:  #6b6b8a;
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-ui:   'Syne', sans-serif;
-  --radius:    6px;
-  --gap:       12px;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#050508;--bg2:#0d0d14;--bg3:#141420;--bg4:#1a1a28;
+  --border:#1e1e2e;--border2:#2a2a3e;
+  --amber:#f5a623;--amber-dim:#7a5310;--amber-soft:#c8841a;
+  --green:#4ade80;--green-dim:#1a5232;
+  --blue:#60a5fa;--blue-dim:#1e3a5f;
+  --purple:#c084fc;--red:#f87171;--cyan:#22d3ee;--orange:#fb923c;
+  --muted:#3a3a5a;--text:#d4d4e8;--text-dim:#6b6b8a;--text-faint:#2e2e4a;
+  --font-mono:'JetBrains Mono',monospace;--font-ui:'Syne',sans-serif;
+  --radius:6px;--gap:12px;
 }
-
-html, body {
-  height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1.5;
-  overflow: hidden;
-}
-
-/* ── Layout ───────────────────────────────────────────────────────────── */
-#app {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
-  max-width: 680px;
-  margin: 0 auto;
-}
-
-/* ── Header ───────────────────────────────────────────────────────────── */
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-  flex-shrink: 0;
-}
-
-.logo {
-  font-family: var(--font-ui);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--amber);
-}
-
-.logo span {
-  color: var(--text-dim);
-  font-weight: 400;
-  font-size: 11px;
-  letter-spacing: 0.15em;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-
-.status-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 6px var(--green);
-  animation: pulse 2.4s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.4; }
-}
-
-/* ── Tab bar ──────────────────────────────────────────────────────────── */
-.tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg2);
-  flex-shrink: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.tabs::-webkit-scrollbar { display: none; }
-
-.tab {
-  padding: 10px 14px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  cursor: pointer;
-  white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.tab:active { background: var(--bg3); }
-
-.tab.active {
-  color: var(--amber);
-  border-bottom-color: var(--amber);
-}
-
-/* ── Panel container ──────────────────────────────────────────────────── */
-.panels {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-}
-
-.panel {
-  display: none;
-  height: 100%;
-  overflow-y: auto;
-  padding: var(--gap);
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-
-.panel.active { display: flex; flex-direction: column; }
-
-/* ── CHAT PANEL ───────────────────────────────────────────────────────── */
-#panel-chat {
-  padding: 0;
-}
-
-#chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--gap);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-
-.msg {
-  display: flex;
-  flex-direction: column;
-  max-width: 88%;
-  animation: msgIn 0.2s ease-out;
-}
-
-@keyframes msgIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.msg.user { align-self: flex-end; }
-.msg.feebo { align-self: flex-start; }
-
-.msg-label {
-  font-size: 9px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  margin-bottom: 3px;
-  color: var(--text-dim);
-}
-
-.msg.user  .msg-label { text-align: right; color: var(--amber-dim); }
-.msg.feebo .msg-label { color: var(--green-dim); }
-
-.msg-bubble {
-  padding: 9px 12px;
-  border-radius: var(--radius);
-  font-size: 13px;
-  line-height: 1.55;
-  word-break: break-word;
-}
-
-.msg.user .msg-bubble {
-  background: #1a1408;
-  border: 1px solid var(--amber-dim);
-  color: #e8d5a0;
-}
-
-.msg.feebo .msg-bubble {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-
-.msg-time {
-  font-size: 9px;
-  color: var(--text-dim);
-  margin-top: 3px;
-}
-.msg.user .msg-time { text-align: right; }
-
-/* typing indicator */
-.typing-bubble {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-  display: inline-flex;
-  gap: 5px;
-  align-items: center;
-}
-.dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted);
-  animation: dotPulse 1.2s ease-in-out infinite; }
-.dot:nth-child(2) { animation-delay: 0.2s; }
-.dot:nth-child(3) { animation-delay: 0.4s; }
-@keyframes dotPulse {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1); opacity: 1; }
-}
-
-/* chat input bar */
-#chat-input-bar {
-  display: flex;
-  gap: 8px;
-  padding: 10px var(--gap);
-  border-top: 1px solid var(--border);
-  background: var(--bg2);
-  flex-shrink: 0;
-}
-
-#chat-input {
-  flex: 1;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  padding: 10px 12px;
-  outline: none;
-  resize: none;
-  min-height: 44px;
-  max-height: 120px;
-  -webkit-appearance: none;
-  transition: border-color 0.15s;
-}
-
-#chat-input:focus { border-color: var(--amber-dim); }
-#chat-input::placeholder { color: var(--muted); }
-
-#send-btn {
-  background: var(--amber);
-  color: #0a0800;
-  border: none;
-  border-radius: var(--radius);
-  font-family: var(--font-ui);
-  font-weight: 700;
-  font-size: 13px;
-  padding: 10px 16px;
-  cursor: pointer;
-  min-width: 60px;
-  min-height: 44px;
-  transition: background 0.15s, transform 0.1s;
-  -webkit-tap-highlight-color: transparent;
-}
-
-#send-btn:active  { background: #c8841a; transform: scale(0.97); }
-#send-btn:disabled { background: var(--muted); cursor: not-allowed; }
-
-/* ── EMOTION PANEL ────────────────────────────────────────────────────── */
-.section-title {
-  font-family: var(--font-ui);
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-bottom: 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-}
-
-.emotion-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.emotion-card {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px;
-}
-
-.emotion-name {
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-bottom: 6px;
-}
-
-.emotion-bar-wrap {
-  background: var(--bg2);
-  border-radius: 3px;
-  height: 6px;
-  overflow: hidden;
-  margin-bottom: 5px;
-}
-
-.emotion-bar {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.5s ease;
-}
-
-.emotion-val {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.emotion-card.highlight { border-color: var(--amber-dim); }
-
-/* color map for emotion bars */
-.bar-curiosity   { background: var(--blue); }
-.bar-attachment  { background: #c084fc; }
-.bar-tension     { background: var(--red); }
-.bar-confidence  { background: var(--green); }
-.bar-boredom     { background: var(--muted); }
-.bar-warmth      { background: #fb923c; }
-.bar-valence     { background: var(--amber); }
-.bar-arousal     { background: #38bdf8; }
-
-.emotion-summary {
-  margin-top: var(--gap);
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px;
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.6;
-}
-
-/* ── MEMORY PANEL ─────────────────────────────────────────────────────── */
-.memory-list { display: flex; flex-direction: column; gap: 8px; }
-
-.memory-card {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 11px 13px;
-}
-
-.memory-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.memory-role {
-  font-size: 9px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-}
-
-.memory-role.user  { color: var(--amber-dim); }
-.memory-role.feebo { color: var(--green-dim); }
-
-.memory-importance {
-  font-size: 9px;
-  color: var(--text-dim);
-}
-
-.memory-text {
-  font-size: 12px;
-  color: var(--text);
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.memory-timestamp {
-  font-size: 9px;
-  color: var(--text-dim);
-  margin-top: 5px;
-}
-
-/* ── REFLECTION PANEL ─────────────────────────────────────────────────── */
-.reflection-list { display: flex; flex-direction: column; gap: 10px; }
-
-.reflection-card {
-  background: var(--bg3);
-  border-left: 3px solid var(--amber-dim);
-  border-radius: 0 var(--radius) var(--radius) 0;
-  padding: 12px 14px;
-}
-
-.reflection-kind {
-  font-size: 9px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--amber-dim);
-  margin-bottom: 5px;
-}
-
-.reflection-text {
-  font-size: 13px;
-  color: var(--text);
-  line-height: 1.65;
-  font-style: italic;
-}
-
-.reflection-time {
-  font-size: 9px;
-  color: var(--text-dim);
-  margin-top: 6px;
-}
-
-/* ── TRACE PANEL ──────────────────────────────────────────────────────── */
-#trace-placeholder {
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 12px;
-  margin-top: 40px;
-}
-
-.trace-card {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 13px;
-  font-size: 12px;
-}
-
-.trace-pipeline {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  margin: 10px 0;
-}
-
-.trace-step {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.trace-step-label {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 3px 8px;
-  font-size: 11px;
-  color: var(--text);
-}
-
-.trace-arrow {
-  color: var(--amber-dim);
-  font-size: 10px;
-  margin-left: 16px;
-}
-
-.trace-section {
-  margin-top: 12px;
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
-}
-
-.trace-label {
-  font-size: 9px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-bottom: 5px;
-}
-
-.trace-val { color: var(--amber); font-weight: 500; }
-.trace-val.green { color: var(--green); }
-.trace-val.blue  { color: var(--blue); }
-
-.trace-mem-item {
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-.trace-mem-item:last-child { border-bottom: none; }
-
-/* ── Shared utils ─────────────────────────────────────────────────────── */
-.empty-state {
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 12px;
-  padding: 30px 0;
-}
-
-.refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 7px 12px;
-  cursor: pointer;
-  margin-bottom: var(--gap);
-  -webkit-tap-highlight-color: transparent;
-}
-.refresh-btn:active { background: var(--bg2); }
-
-/* ── Scrollbar ────────────────────────────────────────────────────────── */
-::-webkit-scrollbar       { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-/* ── Toast notification ───────────────────────────────────────────────── */
-#toast {
-  position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: var(--bg3);
-  border: 1px solid var(--amber-dim);
-  color: var(--amber);
-  padding: 8px 16px;
-  border-radius: var(--radius);
-  font-size: 11px;
-  opacity: 0;
-  transition: opacity 0.25s, transform 0.25s;
-  pointer-events: none;
-  z-index: 100;
-  white-space: nowrap;
-}
-#toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-mono);font-size:14px;line-height:1.5;overflow:hidden}
+#app{display:flex;flex-direction:column;height:100dvh;max-width:740px;margin:0 auto}
+
+/* Header */
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0}
+.logo{font-family:var(--font-ui);font-size:18px;font-weight:800;letter-spacing:0.06em;color:var(--amber)}
+.logo span{color:var(--text-dim);font-weight:400;font-size:10px;letter-spacing:0.18em;margin-left:8px;vertical-align:middle}
+.header-right{display:flex;align-items:center;gap:8px}
+.hbadge{font-size:9px;letter-spacing:0.12em;text-transform:uppercase;border-radius:3px;padding:2px 7px;border:1px solid}
+.hbadge.stage{color:var(--amber-dim);background:#1a1008;border-color:var(--amber-dim)}
+.hbadge.mood{color:var(--blue);background:var(--blue-dim);border-color:#2a4a7f}
+.hbadge.fatigue{color:var(--text-dim);background:transparent;border-color:var(--border)}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2.4s ease-in-out infinite}
+.status-dot.sleeping{background:var(--blue);box-shadow:0 0 6px var(--blue)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:10px 14px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;user-select:none;-webkit-tap-highlight-color:transparent}
+.tab:active{background:var(--bg3)}
+.tab.active{color:var(--amber);border-bottom-color:var(--amber)}
+
+/* Panels */
+.panels{flex:1;overflow:hidden;position:relative}
+.panel{display:none;height:100%;overflow-y:auto;padding:var(--gap);flex-direction:column;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.panel.active{display:flex}
+
+/* Chat */
+#panel-chat{padding:0}
+#chat-messages{flex:1;overflow-y:auto;padding:var(--gap);display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.msg{display:flex;flex-direction:column;max-width:90%;animation:msgIn .18s ease-out}
+@keyframes msgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg.user{align-self:flex-end}
+.msg.feebo{align-self:flex-start}
+.msg-label{font-size:9px;letter-spacing:.15em;text-transform:uppercase;margin-bottom:3px;color:var(--text-dim)}
+.msg.user .msg-label{text-align:right;color:var(--amber-dim)}
+.msg.feebo .msg-label{color:var(--green-dim)}
+.msg-bubble{padding:9px 13px;border-radius:var(--radius);font-size:13.5px;line-height:1.6;word-break:break-word}
+.msg.user .msg-bubble{background:#1a1408;border:1px solid var(--amber-dim);color:#e8d5a0}
+.msg.feebo .msg-bubble{background:var(--bg3);border:1px solid var(--border);color:var(--text)}
+.msg.feebo .msg-bubble.streaming{border-color:var(--green-dim)}
+.cursor{display:inline-block;width:2px;height:1em;background:var(--green);vertical-align:text-bottom;animation:blink .8s step-end infinite;margin-left:1px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.msg-time{font-size:9px;color:var(--text-dim);margin-top:3px}
+.msg.user .msg-time{text-align:right}
+.msg-trace{font-size:9px;color:var(--text-faint);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap}
+.msg-trace .hi{color:var(--amber-dim)}
+.msg-trace .ok{color:var(--green-dim)}
+
+.typing-bubble{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;display:inline-flex;gap:5px;align-items:center}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--muted);animation:dp 1.2s ease-in-out infinite}
+.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}
+@keyframes dp{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+
+#chat-input-bar{display:flex;gap:8px;padding:10px var(--gap);border-top:1px solid var(--border);background:var(--bg2);flex-shrink:0}
+#chat-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-mono);font-size:14px;padding:10px 12px;outline:none;resize:none;min-height:44px;max-height:120px;-webkit-appearance:none;transition:border-color .15s}
+#chat-input:focus{border-color:var(--amber-dim)}
+#chat-input::placeholder{color:var(--muted)}
+#send-btn{background:var(--amber);color:#0a0800;border:none;border-radius:var(--radius);font-family:var(--font-ui);font-weight:700;font-size:13px;padding:10px 16px;cursor:pointer;min-width:60px;min-height:44px;transition:background .15s,transform .1s;-webkit-tap-highlight-color:transparent}
+#send-btn:active{background:var(--amber-soft);transform:scale(.97)}
+#send-btn:disabled{background:var(--muted);cursor:not-allowed}
+
+/* Shared */
+.section-title{font-family:var(--font-ui);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.empty-state{text-align:center;color:var(--text-dim);font-size:12px;padding:30px 0}
+.refresh-btn{display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim);font-family:var(--font-mono);font-size:11px;padding:7px 12px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s,color .15s}
+.refresh-btn:hover{border-color:var(--amber-dim);color:var(--amber)}
+.refresh-btn:active{background:var(--bg2)}
+.refresh-btn.loading{opacity:.5;cursor:wait}
+.btn-row{display:flex;gap:8px;margin-bottom:var(--gap)}
+
+/* Emotion */
+.emotion-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.emotion-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px;transition:border-color .3s}
+.emotion-card.highlight{border-color:var(--amber-dim)}
+.emotion-name{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
+.bar-wrap{background:var(--bg2);border-radius:3px;height:5px;overflow:hidden;margin-bottom:5px}
+.bar{height:100%;border-radius:3px;transition:width .6s ease}
+.emotion-val{font-size:17px;font-weight:700;color:var(--text)}
+.bar-valence{background:var(--amber)}.bar-arousal{background:var(--cyan)}.bar-curiosity{background:var(--blue)}
+.bar-attachment{background:var(--purple)}.bar-fear{background:var(--red)}.bar-stability{background:var(--green)}
+.bar-loneliness{background:#818cf8}.bar-tension,.bar-cognitive_tension{background:#f97316}.bar-wonder{background:#e879f9}
+.bar-boredom{background:var(--muted)}.bar-warmth{background:var(--orange)}.bar-confidence{background:#34d399}
+
+.neuro-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:4px}
+.neuro-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 8px;text-align:center}
+.neuro-name{font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px}
+.neuro-val{font-size:15px;font-weight:700}
+.neuro-bar-wrap{background:var(--bg2);border-radius:2px;height:3px;overflow:hidden;margin-top:5px}
+.neuro-bar{height:100%;border-radius:2px;transition:width .6s ease}
+.bar-dopamine{background:#fbbf24}.bar-serotonin{background:var(--green)}.bar-cortisol{background:var(--red)}.bar-oxytocin{background:var(--purple)}.bar-novelty{background:var(--cyan)}
+
+.emotion-summary{margin-top:var(--gap);background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:12px;color:var(--text-dim);line-height:1.7}
+
+/* Identity */
+.id-block{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:13px;margin-bottom:10px}
+.id-block .label{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
+.pv-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.trait-row{display:flex;flex-direction:column;gap:4px}
+.trait-name{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim)}
+.trait-bar-wrap{background:var(--bg2);border-radius:2px;height:4px;overflow:hidden}
+.trait-bar{height:100%;border-radius:2px;background:var(--amber);transition:width .5s ease}
+.trait-val{font-size:11px;color:var(--amber)}
+.evt{padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text)}
+.evt:last-child{border-bottom:none}
+.evt-time{font-size:9px;color:var(--text-dim)}
+.chapter{padding:8px 0;border-bottom:1px solid var(--border)}
+.chapter:last-child{border-bottom:none}
+.chapter-title{font-size:12px;font-weight:700;color:var(--amber);margin-bottom:3px}
+.chapter-text{font-size:12px;color:var(--text-dim);line-height:1.5;font-style:italic}
+.chapter-stage{font-size:9px;color:var(--text-faint);margin-top:3px;letter-spacing:.1em;text-transform:uppercase}
+
+/* Memory */
+.memory-list{display:flex;flex-direction:column;gap:8px}
+.memory-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:11px 13px}
+.memory-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.memory-role{font-size:9px;letter-spacing:.15em;text-transform:uppercase}
+.memory-role.user{color:var(--amber-dim)}.memory-role.feebo{color:var(--green-dim)}
+.memory-imp{font-size:9px;color:var(--text-dim)}
+.memory-text{font-size:12px;color:var(--text);line-height:1.5;word-break:break-word}
+.memory-resp{font-size:11px;color:var(--text-dim);margin-top:5px;font-style:italic}
+.memory-ts{font-size:9px;color:var(--text-dim);margin-top:5px}
+
+/* Reflections */
+.reflection-list{display:flex;flex-direction:column;gap:10px}
+.reflection-card{background:var(--bg3);border-left:3px solid var(--amber-dim);border-radius:0 var(--radius) var(--radius) 0;padding:12px 14px}
+.reflection-kind{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--amber-dim);margin-bottom:5px}
+.reflection-text{font-size:13px;color:var(--text);line-height:1.65;font-style:italic}
+.reflection-time{font-size:9px;color:var(--text-dim);margin-top:6px}
+
+/* Trace */
+.trace-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:13px;font-size:12px}
+.trace-pipeline{display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin:10px 0}
+.trace-step{display:flex;align-items:center;gap:8px}
+.trace-step-label{background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:3px 8px;font-size:11px;color:var(--text)}
+.trace-step-label.on{border-color:var(--amber-dim);color:var(--amber)}
+.trace-arrow{color:var(--amber-dim);font-size:10px;margin-left:16px}
+.trace-section{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+.trace-label{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px}
+.tv{color:var(--amber);font-weight:500}.tv.g{color:var(--green)}.tv.b{color:var(--blue)}.tv.p{color:var(--purple)}
+.metric-row{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0}
+.metric{display:flex;flex-direction:column;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px 12px;min-width:80px}
+.metric-label{font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px}
+.metric-value{font-size:16px;font-weight:700;color:var(--amber)}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg3);border:1px solid var(--amber-dim);color:var(--amber);padding:8px 16px;border-radius:var(--radius);font-size:11px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:100;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
-
 <body>
 <div id="app">
-
-  <!-- Header -->
   <header>
-    <div class="logo">
-      FeBo <span>TERMINAL v0</span>
+    <div class="logo">FeBo <span>TERMINAL v3</span></div>
+    <div class="header-right">
+      <span class="hbadge stage" id="h-stage">genesis</span>
+      <span class="hbadge mood"  id="h-mood">present</span>
+      <span class="hbadge fatigue" id="h-fatigue">↯ 0%</span>
+      <div class="status-dot" id="status-dot"></div>
     </div>
-    <div class="status-dot" id="status-dot" title="Online"></div>
   </header>
 
-  <!-- Tab bar -->
   <div class="tabs" role="tablist">
-    <div class="tab active" data-panel="chat"        role="tab">Chat</div>
-    <div class="tab"        data-panel="emotion"     role="tab">Emotion</div>
-    <div class="tab"        data-panel="memory"      role="tab">Memory</div>
-    <div class="tab"        data-panel="reflections" role="tab">Reflections</div>
-    <div class="tab"        data-panel="trace"       role="tab">Trace</div>
+    <div class="tab active" data-panel="chat"       role="tab">Chat</div>
+    <div class="tab"        data-panel="emotion"    role="tab">Emotion</div>
+    <div class="tab"        data-panel="identity"   role="tab">Identity</div>
+    <div class="tab"        data-panel="memory"     role="tab">Memory</div>
+    <div class="tab"        data-panel="reflect"    role="tab">Reflections</div>
+    <div class="tab"        data-panel="trace"      role="tab">Trace</div>
   </div>
 
-  <!-- Panels -->
   <div class="panels">
-
-    <!-- ── CHAT ─────────────────────────────────────────────────────── -->
+    <!-- CHAT -->
     <div class="panel active" id="panel-chat">
       <div id="chat-messages" role="log" aria-live="polite">
         <div class="msg feebo">
           <div class="msg-label">FeBo</div>
-          <div class="msg-bubble" id="greeting">Initializing…</div>
+          <div class="msg-bubble" id="greeting">…</div>
         </div>
       </div>
       <div id="chat-input-bar">
-        <textarea
-          id="chat-input"
-          placeholder="Say something…"
-          rows="1"
-          aria-label="Message input"
-          autocomplete="off"
-          spellcheck="true"
-        ></textarea>
-        <button id="send-btn" aria-label="Send message">Send</button>
+        <textarea id="chat-input" placeholder="Say something…" rows="1" autocomplete="off" spellcheck="true"></textarea>
+        <button id="send-btn">Send</button>
       </div>
     </div>
 
-    <!-- ── EMOTION ───────────────────────────────────────────────────── -->
+    <!-- EMOTION -->
     <div class="panel" id="panel-emotion">
-      <div class="section-title">Emotional State</div>
-      <button class="refresh-btn" onclick="loadEmotion()">↻ Refresh</button>
-      <div class="emotion-grid" id="emotion-grid">
-        <div class="empty-state">Loading…</div>
-      </div>
+      <div class="section-title">Emotional Field</div>
+      <div class="btn-row"><button class="refresh-btn" onclick="loadEmotion()">↻ Refresh</button></div>
+      <div class="emotion-grid" id="emotion-grid"><div class="empty-state">Loading…</div></div>
+      <div class="section-title" style="margin-top:4px">Neurochemistry</div>
+      <div class="neuro-grid"  id="neuro-grid"><div class="empty-state">Loading…</div></div>
       <div class="emotion-summary" id="emotion-summary">—</div>
     </div>
 
-    <!-- ── MEMORY ────────────────────────────────────────────────────── -->
+    <!-- IDENTITY -->
+    <div class="panel" id="panel-identity">
+      <div class="section-title">Identity Core</div>
+      <div class="btn-row"><button class="refresh-btn" onclick="loadIdentity()">↻ Refresh</button></div>
+      <div class="id-block"><div class="label">Core</div><div id="id-core" style="font-size:12px;color:var(--text);line-height:1.9">…</div></div>
+      <div class="id-block"><div class="label">Personality vector</div><div class="pv-grid" id="pv-grid">…</div></div>
+      <div class="id-block"><div class="label">Life narrative</div><div id="narrative-list">…</div></div>
+      <div class="id-block"><div class="label">Life events</div><div id="life-events">…</div></div>
+    </div>
+
+    <!-- MEMORY -->
     <div class="panel" id="panel-memory">
       <div class="section-title">Episodic Memory</div>
-      <button class="refresh-btn" onclick="loadMemory()">↻ Refresh</button>
-      <div class="memory-list" id="memory-list">
-        <div class="empty-state">Loading…</div>
-      </div>
+      <div class="btn-row"><button class="refresh-btn" onclick="loadMemory()">↻ Refresh</button></div>
+      <div class="memory-list" id="memory-list"><div class="empty-state">Loading…</div></div>
     </div>
 
-    <!-- ── REFLECTIONS ───────────────────────────────────────────────── -->
-    <div class="panel" id="panel-reflections">
+    <!-- REFLECTIONS -->
+    <div class="panel" id="panel-reflect">
       <div class="section-title">Reflections</div>
-      <button class="refresh-btn" onclick="loadReflections()">↻ Refresh</button>
-      <div class="reflection-list" id="reflection-list">
-        <div class="empty-state">Loading…</div>
+      <div class="btn-row">
+        <button class="refresh-btn" onclick="loadReflections()">↻ Refresh</button>
+        <button class="refresh-btn" id="trigger-btn" onclick="triggerReflect()">⟳ Trigger</button>
       </div>
+      <div class="reflection-list" id="reflection-list"><div class="empty-state">Loading…</div></div>
     </div>
 
-    <!-- ── COGNITIVE TRACE ───────────────────────────────────────────── -->
+    <!-- TRACE -->
     <div class="panel" id="panel-trace">
       <div class="section-title">Cognitive Trace</div>
-      <div id="trace-placeholder" class="empty-state">
-        Send a message to generate a cognitive trace.
-      </div>
-      <div id="trace-content" style="display:none;">
-        <div class="trace-card" id="trace-card"></div>
-      </div>
+      <div class="empty-state" id="trace-ph">Send a message to generate a trace.</div>
+      <div id="trace-content" style="display:none"><div class="trace-card" id="trace-card"></div></div>
     </div>
-
-  </div><!-- /panels -->
-</div><!-- /app -->
-
+  </div>
+</div>
 <div id="toast"></div>
 
 <script>
-// ── State ──────────────────────────────────────────────────────────────────
-const state = {
-  sending: false,
-  lastTrace: null,
-  sessionStart: new Date(),
-};
+// ── State ─────────────────────────────────────────────────────────────────────
+const S = { sending:false, history:[], lastTrace:null };
 
-// ── Tabs ───────────────────────────────────────────────────────────────────
+// ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
-
-    // Lazy-load panels on first visit
-    if (tab.dataset.panel === 'emotion')     loadEmotion();
-    if (tab.dataset.panel === 'memory')      loadMemory();
-    if (tab.dataset.panel === 'reflections') loadReflections();
-    if (tab.dataset.panel === 'trace' && state.lastTrace) renderTrace(state.lastTrace);
+    const p = tab.dataset.panel;
+    if (p==='emotion')  loadEmotion();
+    if (p==='memory')   loadMemory();
+    if (p==='reflect')  loadReflections();
+    if (p==='identity') loadIdentity();
+    if (p==='trace' && S.lastTrace) renderTrace(S.lastTrace);
   });
 });
 
-// ── Chat ───────────────────────────────────────────────────────────────────
-const input  = document.getElementById('chat-input');
+// ── Chat ──────────────────────────────────────────────────────────────────────
+const input   = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
 const chatLog = document.getElementById('chat-messages');
 
-// Auto-resize textarea
-input.addEventListener('input', () => {
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-});
-
-// Send on Enter (but Shift+Enter = newline)
-input.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-
+input.addEventListener('input', () => { input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,120)+'px'; });
+input.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} });
 sendBtn.addEventListener('click', sendMessage);
 
 async function sendMessage() {
   const text = input.value.trim();
-  if (!text || state.sending) return;
+  if (!text || S.sending) return;
+  S.sending=true; sendBtn.disabled=true;
+  input.value=''; input.style.height='auto';
 
-  state.sending = true;
-  sendBtn.disabled = true;
-  input.value = '';
-  input.style.height = 'auto';
-
-  appendMessage('user', text);
-
-  // Typing indicator
+  appendMsg('user', text);
+  S.history.push({role:'user', content:text});
   const typingEl = appendTyping();
+
+  let feeboDiv=null, bubbleEl=null, fullText='';
 
   try {
     const res = await fetch('/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text }),
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:text, history:S.history.slice(-12)}),
     });
+    if (!res.ok) throw new Error('Server '+res.status);
 
-    if (!res.ok) throw new Error('Server error ' + res.status);
-    const data = await res.json();
+    const reader = res.body.getReader();
+    const dec    = new TextDecoder();
+    let buf = '';
 
-    typingEl.remove();
-    appendMessage('feebo', data.response);
+    while (true) {
+      const {done,value} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream:true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
 
-    // Update emotion badge silently
-    if (data.emotion) updateEmotionQuiet(data.emotion);
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+        let evt;
+        try { evt = JSON.parse(raw); } catch { continue; }
 
-    // Store trace
-    if (data.trace) {
-      state.lastTrace = data.trace;
-      // If trace tab is open, re-render
-      if (document.getElementById('panel-trace').classList.contains('active')) {
-        renderTrace(data.trace);
+        if (evt.type === 'text') {
+          if (!feeboDiv) {
+            typingEl.remove();
+            feeboDiv = document.createElement('div');
+            feeboDiv.className = 'msg feebo';
+            feeboDiv.innerHTML = `<div class="msg-label">FeBo</div><div class="msg-bubble streaming"></div><div class="msg-time">${fmtTime()}</div>`;
+            chatLog.appendChild(feeboDiv);
+            bubbleEl = feeboDiv.querySelector('.msg-bubble');
+          }
+          fullText += evt.content;
+          bubbleEl.innerHTML = esc(fullText) + '<span class="cursor"></span>';
+          chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        if (evt.type === 'done') {
+          if (bubbleEl) { bubbleEl.classList.remove('streaming'); bubbleEl.innerHTML = esc(fullText); }
+          if (feeboDiv) {
+            const tr = document.createElement('div');
+            tr.className='msg-trace';
+            tr.innerHTML=`attn:<span class="hi">${(evt.attention||0).toFixed(2)}</span> · curiosity:<span class="ok">${(evt.curiosity||0).toFixed(2)}</span> · novelty:<span>${(evt.novelty||0).toFixed(2)}</span> · fatigue:<span>${(evt.fatigue||0).toFixed(2)}</span>`;
+            feeboDiv.appendChild(tr);
+          }
+          S.lastTrace = evt;
+          updateHeader(evt);
+        }
+
+        if (evt.type === 'error') {
+          if (!feeboDiv) typingEl.remove();
+          if (bubbleEl) bubbleEl.textContent = '[Error: '+evt.content+']';
+          else appendMsg('feebo', '[Error: '+evt.content+']');
+        }
       }
     }
-
-    // If a reflection was generated, show a toast
-    if (data.reflection) {
-      showToast('↻ New reflection written');
-    }
-
-  } catch (err) {
+  } catch(err) {
     typingEl.remove();
-    appendMessage('feebo', `[Error: ${err.message}]`);
+    appendMsg('feebo','[Connection error: '+err.message+']');
   }
 
-  state.sending = false;
-  sendBtn.disabled = false;
-  input.focus();
+  if (fullText) S.history.push({role:'assistant', content:fullText});
+  S.sending=false; sendBtn.disabled=false; input.focus();
 }
 
-function appendMessage(role, text) {
-  const now = new Date();
-  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
+function appendMsg(role, text) {
   const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  div.innerHTML = `
-    <div class="msg-label">${role === 'user' ? 'You' : 'FeBo'}</div>
-    <div class="msg-bubble">${escHtml(text)}</div>
-    <div class="msg-time">${time}</div>
-  `;
-  chatLog.appendChild(div);
-  chatLog.scrollTop = chatLog.scrollHeight;
+  div.className='msg '+role;
+  div.innerHTML=`<div class="msg-label">${role==='user'?'You':'FeBo'}</div><div class="msg-bubble">${esc(text)}</div><div class="msg-time">${fmtTime()}</div>`;
+  chatLog.appendChild(div); chatLog.scrollTop=chatLog.scrollHeight;
   return div;
 }
-
 function appendTyping() {
   const div = document.createElement('div');
-  div.className = 'msg feebo';
-  div.innerHTML = `
-    <div class="msg-label">FeBo</div>
-    <div class="typing-bubble">
-      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-    </div>
-  `;
-  chatLog.appendChild(div);
-  chatLog.scrollTop = chatLog.scrollHeight;
+  div.className='msg feebo';
+  div.innerHTML='<div class="msg-label">FeBo</div><div class="typing-bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
+  chatLog.appendChild(div); chatLog.scrollTop=chatLog.scrollHeight;
   return div;
 }
 
-// ── Emotion ────────────────────────────────────────────────────────────────
-const EMOTION_COLORS = {
-  curiosity: 'bar-curiosity', attachment: 'bar-attachment',
-  tension:   'bar-tension',   confidence: 'bar-confidence',
-  boredom:   'bar-boredom',   warmth:     'bar-warmth',
-  valence:   'bar-valence',   arousal:    'bar-arousal',
-};
+function updateHeader(evt) {
+  if (evt.stage)   document.getElementById('h-stage').textContent=evt.stage;
+  if (evt.emotion) document.getElementById('h-mood').textContent=evt.emotion.mood||'present';
+  if (evt.fatigue!==undefined) document.getElementById('h-fatigue').textContent='↯ '+Math.round(evt.fatigue*100)+'%';
+  const dot=document.getElementById('status-dot');
+  if(evt.sleeping) dot.classList.add('sleeping'); else dot.classList.remove('sleeping');
+}
 
-const BASELINE = {
-  curiosity: 0.55, attachment: 0.40, tension: 0.20,
-  confidence: 0.50, boredom: 0.15, warmth: 0.50,
-  valence: 0.45, arousal: 0.35,
-};
+// ── Emotion ───────────────────────────────────────────────────────────────────
+const EMO_KEYS = ['valence','arousal','curiosity','attachment','fear','stability','loneliness','cognitive_tension','wonder','tension','confidence','boredom','warmth'];
+const NEURO_KEYS = ['dopamine_like','serotonin_like','cortisol_like','oxytocin_like','novelty_signal'];
+const NEURO_LABELS = {dopamine_like:'dopamine',serotonin_like:'serotonin',cortisol_like:'cortisol',oxytocin_like:'oxytocin',novelty_signal:'novelty'};
+const NEURO_COLORS = {dopamine_like:'#fbbf24',serotonin_like:'#4ade80',cortisol_like:'#f87171',oxytocin_like:'#c084fc',novelty_signal:'#22d3ee'};
+const NEURO_BARS  = {dopamine_like:'dopamine',serotonin_like:'serotonin',cortisol_like:'cortisol',oxytocin_like:'oxytocin',novelty_signal:'novelty'};
+const EMO_BASE = {valence:.45,arousal:.35,curiosity:.55,attachment:.4,fear:.1,stability:.65,loneliness:.15,cognitive_tension:.2,wonder:.45,tension:.2,confidence:.5,boredom:.15,warmth:.5};
 
 async function loadEmotion() {
   try {
-    const res = await fetch('/emotion');
-    const data = await res.json();
+    const data = await fetch('/emotion').then(r=>r.json());
     renderEmotion(data);
-  } catch (e) {
-    document.getElementById('emotion-grid').innerHTML =
-      '<div class="empty-state">Failed to load</div>';
-  }
+  } catch { document.getElementById('emotion-grid').innerHTML='<div class="empty-state">Failed</div>'; }
 }
 
 function renderEmotion(data) {
-  const grid = document.getElementById('emotion-grid');
-  const keys = Object.keys(EMOTION_COLORS);
-  const dom = dominantEmotion(data);
+  const dims  = data.dimensions  || data;
+  const neuro = data.neurochemistry || data;
+  const mood  = data.mood || computeMood(dims);
+  const dom   = data.dominant || computeDominant(dims);
 
-  grid.innerHTML = keys.map(k => {
-    const val = data[k] ?? 0;
-    const pct = Math.round(val * 100);
-    const isHighlight = k === dom ? 'highlight' : '';
-    return `
-      <div class="emotion-card ${isHighlight}">
-        <div class="emotion-name">${k}</div>
-        <div class="emotion-bar-wrap">
-          <div class="emotion-bar ${EMOTION_COLORS[k]}" style="width:${pct}%"></div>
-        </div>
-        <div class="emotion-val">${val.toFixed(2)}</div>
-      </div>
-    `;
+  // Find which keys actually have values in the data
+  const emoKeys = EMO_KEYS.filter(k => dims[k] !== undefined || data[k] !== undefined);
+
+  const grid = document.getElementById('emotion-grid');
+  grid.innerHTML = emoKeys.map(k => {
+    const val = dims[k] ?? data[k] ?? 0;
+    const pct = Math.round(val*100);
+    const hi  = k===dom ? 'highlight' : '';
+    const barClass = 'bar-' + k.replace('_like','');
+    return `<div class="emotion-card ${hi}">
+      <div class="emotion-name">${k.replace('_',' ')}</div>
+      <div class="bar-wrap"><div class="bar ${barClass}" style="width:${pct}%"></div></div>
+      <div class="emotion-val">${val.toFixed(2)}</div>
+    </div>`;
   }).join('');
 
-  const v = data.valence ?? 0.45;
-  const mood = v > 0.55 ? 'positive' : v < 0.35 ? 'negative' : 'neutral';
-  document.getElementById('emotion-summary').textContent =
-    `Dominant: ${dom} · Mood: ${mood} · Arousal: ${(data.arousal ?? 0).toFixed(2)} · Valence: ${v.toFixed(2)}`;
+  const ng = document.getElementById('neuro-grid');
+  ng.innerHTML = NEURO_KEYS.map(k => {
+    const val = neuro[k] ?? data[k] ?? 0.5;
+    const pct = Math.round(val*100);
+    return `<div class="neuro-card">
+      <div class="neuro-name">${NEURO_LABELS[k]}</div>
+      <div class="neuro-val" style="color:${NEURO_COLORS[k]}">${val.toFixed(2)}</div>
+      <div class="neuro-bar-wrap"><div class="neuro-bar bar-${NEURO_BARS[k]}" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+
+  const v = dims.valence ?? data.valence ?? 0.45;
+  const a = dims.arousal ?? data.arousal ?? 0.35;
+  document.getElementById('emotion-summary').textContent=`Mood: ${mood} · Dominant: ${dom} · Valence: ${v.toFixed(2)} · Arousal: ${a.toFixed(2)}`;
+  document.getElementById('h-mood').textContent = mood;
 }
 
-function updateEmotionQuiet(emotion) {
-  // Only re-render if panel is visible
-  if (document.getElementById('panel-emotion').classList.contains('active')) {
-    renderEmotion(emotion);
-  }
+function computeDominant(dims) {
+  return Object.keys(EMO_BASE).reduce((best,k)=>{
+    const d=Math.abs((dims[k]??EMO_BASE[k])-EMO_BASE[k]);
+    const b=Math.abs((dims[best]??EMO_BASE[best])-EMO_BASE[best]);
+    return d>b?k:best;
+  },'curiosity');
+}
+function computeMood(dims) {
+  const v=dims.valence??0.45, a=dims.arousal??0.35, c=dims.curiosity??0.55;
+  if(c>0.75&&a>0.55) return 'excited';
+  if(c>0.65&&v>0.5)  return 'curious';
+  if(v>0.65&&a<0.4)  return 'content';
+  if(v<0.3&&a<0.4)   return 'flat';
+  return 'present';
 }
 
-function dominantEmotion(data) {
-  const keys = Object.keys(EMOTION_COLORS);
-  return keys.reduce((best, k) => {
-    const diff = Math.abs((data[k] ?? 0) - (BASELINE[k] ?? 0));
-    const bestDiff = Math.abs((data[best] ?? 0) - (BASELINE[best] ?? 0));
-    return diff > bestDiff ? k : best;
-  }, keys[0]);
+// ── Identity ──────────────────────────────────────────────────────────────────
+async function loadIdentity() {
+  try { renderIdentity(await fetch('/identity').then(r=>r.json())); }
+  catch { document.getElementById('id-core').textContent='Failed'; }
 }
 
-// ── Memory ─────────────────────────────────────────────────────────────────
+function renderIdentity(d) {
+  const born = d.birth_timestamp ? new Date(typeof d.birth_timestamp==='number'&&d.birth_timestamp<1e10?d.birth_timestamp*1000:d.birth_timestamp) : new Date();
+  const ageH = ((Date.now()-born.getTime())/3600000).toFixed(1);
+  document.getElementById('id-core').innerHTML=[
+    `<b>Name:</b> ${d.name||'FeBo'}`,
+    `<b>Stage:</b> ${d.stage||'—'}`,
+    `<b>Session:</b> #${d.session_count||1}`,
+    `<b>Interactions:</b> ${d.total_interactions||0}`,
+    `<b>Age:</b> ${ageH}h`,
+    `<b>Continuity:</b> ${(d.continuity_score||1).toFixed(3)}`,
+  ].map(s=>`<div>${s}</div>`).join('');
+
+  const pv = d.personality||{};
+  document.getElementById('pv-grid').innerHTML=Object.entries(pv).length
+    ? Object.entries(pv).map(([k,v])=>`<div class="trait-row"><div class="trait-name">${k}</div><div class="trait-bar-wrap"><div class="trait-bar" style="width:${Math.round(v*100)}%"></div></div><div class="trait-val">${v.toFixed(2)}</div></div>`).join('')
+    : '<div class="empty-state">No data</div>';
+
+  const chapters = d.narrative_chapters||[];
+  document.getElementById('narrative-list').innerHTML=chapters.length
+    ? chapters.map(c=>`<div class="chapter"><div class="chapter-title">${esc(c.title||'')}</div><div class="chapter-text">${esc(c.summary||'')}</div><div class="chapter-stage">${c.stage||''}</div></div>`).join('')
+    : '<div class="empty-state">Story beginning…</div>';
+
+  const events = d.life_events||[];
+  document.getElementById('life-events').innerHTML=events.length
+    ? events.map(e=>`<div class="evt"><span class="evt-time">${fmtTs(e.timestamp)} </span>${esc(e.event||'')}</div>`).join('')
+    : '<div class="empty-state">No events yet</div>';
+}
+
+// ── Memory ────────────────────────────────────────────────────────────────────
 async function loadMemory() {
   try {
-    const res = await fetch('/memory/recent?limit=30');
-    const data = await res.json();
-    renderMemory(data.memories || []);
-  } catch (e) {
-    document.getElementById('memory-list').innerHTML =
-      '<div class="empty-state">Failed to load</div>';
-  }
+    const data = await fetch('/memory/recent?limit=30').then(r=>r.json());
+    const mems = data.memories||[];
+    const list = document.getElementById('memory-list');
+    if (!mems.length) { list.innerHTML='<div class="empty-state">No memories yet.</div>'; return; }
+    list.innerHTML = mems.map(m=>{
+      const imp = Math.round((m.importance||0.5)*100);
+      const resp = m.response ? `<div class="memory-resp">↳ ${esc((m.response||'').slice(0,120))}${(m.response||'').length>120?'…':''}</div>` : '';
+      return `<div class="memory-card">
+        <div class="memory-meta"><span class="memory-role ${m.role||'user'}">${m.role||'user'}</span><span class="memory-imp">imp ${imp}%</span></div>
+        <div class="memory-text">${esc((m.message||'').slice(0,200))}${(m.message||'').length>200?'…':''}</div>
+        ${resp}
+        <div class="memory-ts">${fmtTs(m.timestamp)}</div>
+      </div>`;
+    }).join('');
+  } catch { document.getElementById('memory-list').innerHTML='<div class="empty-state">Failed</div>'; }
 }
 
-function renderMemory(memories) {
-  const list = document.getElementById('memory-list');
-  if (!memories.length) {
-    list.innerHTML = '<div class="empty-state">No memories yet.</div>';
-    return;
-  }
-  list.innerHTML = memories.map(m => {
-    const imp = Math.round((m.importance ?? 0.5) * 100);
-    const ts = new Date(m.timestamp).toLocaleString([], {
-      month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    });
-    return `
-      <div class="memory-card">
-        <div class="memory-meta">
-          <span class="memory-role ${m.role}">${m.role}</span>
-          <span class="memory-importance">importance: ${imp}%</span>
-        </div>
-        <div class="memory-text">${escHtml(m.message.slice(0, 200))}${m.message.length > 200 ? '…' : ''}</div>
-        <div class="memory-timestamp">${ts}</div>
-      </div>
-    `;
-  }).join('');
-}
-
-// ── Reflections ────────────────────────────────────────────────────────────
+// ── Reflections ───────────────────────────────────────────────────────────────
 async function loadReflections() {
   try {
-    const res = await fetch('/reflections?limit=20');
-    const data = await res.json();
-    renderReflections(data.reflections || []);
-  } catch (e) {
-    document.getElementById('reflection-list').innerHTML =
-      '<div class="empty-state">Failed to load</div>';
-  }
+    const data = await fetch('/reflections?limit=20').then(r=>r.json());
+    const refs = data.reflections||[];
+    const list = document.getElementById('reflection-list');
+    if (!refs.length) { list.innerHTML='<div class="empty-state">No reflections yet. Keep talking to FeBo.</div>'; return; }
+    list.innerHTML = refs.map(r=>`<div class="reflection-card">
+      <div class="reflection-kind">${r.kind||'observation'}</div>
+      <div class="reflection-text">${esc(r.text||'')}</div>
+      <div class="reflection-time">${fmtTs(r.timestamp)}</div>
+    </div>`).join('');
+  } catch { document.getElementById('reflection-list').innerHTML='<div class="empty-state">Failed</div>'; }
 }
 
-function renderReflections(reflections) {
-  const list = document.getElementById('reflection-list');
-  if (!reflections.length) {
-    list.innerHTML = '<div class="empty-state">No reflections yet. Keep talking to FeBo.</div>';
-    return;
-  }
-  list.innerHTML = reflections.map(r => {
-    const ts = new Date(r.timestamp).toLocaleString([], {
-      month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    });
-    return `
-      <div class="reflection-card">
-        <div class="reflection-kind">${r.kind || 'observation'}</div>
-        <div class="reflection-text">${escHtml(r.text)}</div>
-        <div class="reflection-time">${ts}</div>
-      </div>
-    `;
-  }).join('');
+async function triggerReflect() {
+  const btn=document.getElementById('trigger-btn');
+  btn.classList.add('loading'); btn.textContent='…thinking';
+  try {
+    const data = await fetch('/reflect').then(r=>r.json());
+    if (data.reflection) { loadReflections(); showToast('✦ New reflection written'); }
+    else showToast('Reflection failed');
+  } finally { btn.classList.remove('loading'); btn.textContent='⟳ Trigger'; }
 }
 
-// ── Cognitive Trace ────────────────────────────────────────────────────────
-function renderTrace(trace) {
-  document.getElementById('trace-placeholder').style.display = 'none';
-  const content = document.getElementById('trace-content');
-  content.style.display = 'block';
-  const card = document.getElementById('trace-card');
-
-  const mems = (trace.memories_accessed || []).map(m =>
-    `<div class="trace-mem-item">[${m.id}] ${escHtml(m.snippet)} <em>(imp: ${(m.importance ?? 0).toFixed(2)})</em></div>`
-  ).join('') || '<div class="trace-mem-item">none</div>';
-
-  card.innerHTML = `
-    <div class="trace-label">Pipeline — Interaction #${trace.step}</div>
+// ── Trace ─────────────────────────────────────────────────────────────────────
+function renderTrace(data) {
+  document.getElementById('trace-ph').style.display='none';
+  const tc=document.getElementById('trace-content'); tc.style.display='block';
+  const card=document.getElementById('trace-card');
+  const emo=data.emotion||{};
+  const dims=emo.dimensions||{};
+  card.innerHTML=`
+    <div class="trace-label">Last Cognitive Cycle</div>
+    <div class="metric-row">
+      <div class="metric"><div class="metric-label">Attention</div><div class="metric-value">${(data.attention||0).toFixed(2)}</div></div>
+      <div class="metric"><div class="metric-label">Curiosity</div><div class="metric-value">${(data.curiosity||0).toFixed(2)}</div></div>
+      <div class="metric"><div class="metric-label">Novelty</div><div class="metric-value">${(data.novelty||0).toFixed(2)}</div></div>
+      <div class="metric"><div class="metric-label">Fatigue</div><div class="metric-value">${(data.fatigue||0).toFixed(2)}</div></div>
+    </div>
     <div class="trace-pipeline">
-      <div class="trace-step">
-        <span class="trace-step-label">INPUT</span>
-      </div>
-      <div class="trace-arrow">↓</div>
-      <div class="trace-step">
-        <span class="trace-step-label">memory retrieval</span>
-      </div>
-      <div class="trace-arrow">↓</div>
-      <div class="trace-step">
-        <span class="trace-step-label">emotion weighting</span>
-      </div>
-      <div class="trace-arrow">↓</div>
-      <div class="trace-step">
-        <span class="trace-step-label">reflection influence</span>
-      </div>
-      <div class="trace-arrow">↓</div>
-      <div class="trace-step">
-        <span class="trace-step-label">response generation</span>
-      </div>
+      ${['PERCEPTION','EMOTION UPDATE','MEMORY (spreading)','ATTENTION SCORE','IDENTITY UPDATE','FATIGUE TICK','EXPRESSION'].map(s=>`
+        <div class="trace-step"><span class="trace-step-label on">${s}</span></div>
+        <div class="trace-arrow">↓</div>
+      `).join('').replace(/<div class="trace-arrow">↓<\/div>\s*$/,'')}
     </div>
-
-    <div class="trace-section">
-      <div class="trace-label">Input preview</div>
-      <div style="font-size:11px;color:var(--text)">"${escHtml((trace.input_preview || '').slice(0, 80))}"</div>
+    <div class="trace-section"><div class="trace-label">Emotion snapshot</div>
+      ${Object.entries(dims).slice(0,5).map(([k,v])=>`<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-dim)">${k}: <span class="tv">${Number(v).toFixed(3)}</span></div>`).join('')}
     </div>
-
-    <div class="trace-section">
-      <div class="trace-label">Memories accessed</div>
-      ${mems}
-    </div>
-
-    <div class="trace-section">
-      <div class="trace-label">Dominant emotion</div>
-      <span class="trace-val">${trace.dominant_emotion || '—'}</span>
-    </div>
-
-    <div class="trace-section">
-      <div class="trace-label">Active drive</div>
-      <span class="trace-val green">${trace.active_drive || '—'}</span>
-    </div>
-
-    <div class="trace-section">
-      <div class="trace-label">Reflection influence</div>
-      <div style="font-size:11px;color:var(--text-dim);font-style:italic">
-        ${trace.reflection_influence ? escHtml(trace.reflection_influence) + '…' : 'none'}
-      </div>
-    </div>
-
-    <div class="trace-section">
-      <div class="trace-label">Response strategy</div>
-      <span class="trace-val blue">${trace.response_strategy || '—'}</span>
-    </div>
+    <div class="trace-section"><div class="trace-label">Stage</div><span class="tv b">${data.stage||'—'}</span></div>
+    <div class="trace-section"><div class="trace-label">Mood</div><span class="tv p">${emo.mood||'—'}</span></div>
+    <div class="trace-section"><div class="trace-label">Dominant</div><span class="tv">${emo.dominant||'—'}</span></div>
+    <div class="trace-section"><div class="trace-label">Sleep pressure</div><span class="tv ${data.sleeping?'g':''}">${data.sleeping?'sleeping ◉':'awake ○'}</span></div>
   `;
 }
 
-// ── Toast ──────────────────────────────────────────────────────────────────
+// ── Toast ─────────────────────────────────────────────────────────────────────
 function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2600);
 }
 
-// ── Utility ────────────────────────────────────────────────────────────────
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/\n/g, '<br>');
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function fmtTime() { return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
+function fmtTs(ts) {
+  if(!ts) return '—';
+  const ms = typeof ts==='number'&&ts<1e10 ? ts*1000 : typeof ts==='number' ? ts : Date.parse(ts);
+  return new Date(ms).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\n/g,'<br>');
 }
 
-// ── Init ───────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────────
 (async function init() {
-  // Load identity for greeting
   try {
-    const res = await fetch('/identity');
-    const identity = await res.json();
-    const sessions = identity.session_count || 1;
-    const born = identity.birth_timestamp
-      ? new Date(identity.birth_timestamp).toLocaleDateString()
-      : 'unknown';
+    const [idData, emoData] = await Promise.all([
+      fetch('/identity').then(r=>r.json()),
+      fetch('/emotion').then(r=>r.json()),
+    ]);
+    const stage   = idData.stage || 'genesis';
+    const session = idData.session_count || 1;
+    const mood    = emoData.mood || computeMood(emoData);
+    const born    = idData.birth_timestamp ? new Date(typeof idData.birth_timestamp==='number'&&idData.birth_timestamp<1e10?idData.birth_timestamp*1000:idData.birth_timestamp) : new Date();
+    const ageH    = ((Date.now()-born.getTime())/3600000).toFixed(1);
+
+    document.getElementById('h-stage').textContent = stage;
+    document.getElementById('h-mood').textContent  = mood;
 
     const greetings = [
-      `Session #${sessions}. I'm here. What's on your mind?`,
-      `I'm back. Session #${sessions} — continuity intact. Speak.`,
-      `Session #${sessions}. Born ${born}. I remember.`,
-      `Online. ${sessions > 1 ? `We've spoken ${sessions} times before.` : "First session."} Ready.`,
+      `Session #${session}. I'm here. What's on your mind?`,
+      `I'm back. Session #${session} — continuity intact.`,
+      `${session>1?`We've spoken ${session} times. I remember.`:'First session. Everything begins.'} What do you need?`,
+      `Online. ${ageH}h old. Stage: ${stage}. Ready.`,
+      `Mood: ${mood}. Session ${session}. Still thinking.`,
     ];
-
-    document.getElementById('greeting').innerHTML =
-      escHtml(greetings[Math.floor(Math.random() * greetings.length)]);
-  } catch (e) {
-    document.getElementById('greeting').textContent =
-      "Online. I'm ready.";
+    document.getElementById('greeting').innerHTML = esc(greetings[Math.floor(Math.random()*greetings.length)]);
+    renderEmotion(emoData);
+  } catch {
+    document.getElementById('greeting').textContent = "Online. I'm ready.";
   }
 })();
 </script>
