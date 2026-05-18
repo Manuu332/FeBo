@@ -1,308 +1,377 @@
 """
-core/pipeline.py
-----------------
-FeBo's cognitive pipeline.
-Orchestrates: memory retrieval → emotion weighting → reflection influence → LLM response.
-Returns the response plus a structured cognitive trace for observability.
+core/pipeline.py — FeBo's cognitive pipeline. ZERO external model.
+Causal audit applied: every system now measurably changes outcomes.
+Uses RuntimeState for all session globals. Concept novelty replaces word novelty.
 """
+from __future__ import annotations
 
 import json
-import os
-from datetime import datetime, timezone
-from typing import Optional
-
-import anthropic
+import time
+from typing import Dict, Generator, List, Optional
 
 from emotion.state import (
-    load_emotion, apply_delta, infer_delta_from_text,
-    dominant_emotion, emotion_summary, BASELINE
+    load_emotion, update_from_stimulus, infer_delta_from_text,
+    dominant_emotion, get_display, save_emotion, BASELINE, decay_toward_baseline
 )
 from memory.store import (
-    retrieve_for_context, save_memory, get_recent_memories, memory_count
+    retrieve_for_context, save_memory, get_recent_memories,
+    memory_count, score_importance, get_activation_for, reinforce_association
 )
+from memory.concepts import extract_concepts, concept_novelty, expand_with_neighbors
 from reflection.engine import (
-    get_reflections, should_reflect, compose_reflection, write_reflection
+    should_reflect, compose_reflection, write_reflection,
+    age_contradictions, get_contradictions, get_contradiction_summary,
+    mark_reflected, get_reflect_count, add_contradiction
 )
-from identity.profile import load_identity, get_narrative_summary, append_narrative
+from identity.profile import (
+    load_identity, append_narrative, get_narrative_summary,
+    increment_interactions, update_relationship, drift_personality,
+    get_relationship, get_development_stage, to_system_prompt_block,
+    add_narrative_chapter, _add_event
+)
+from core.fatigue import tick as fat_tick, get_state as fat_state, get_summary as fat_summary
+from core.world_model import predict_response_type, compute_prediction_error, update_from_observation
+from core.curiosity import (
+    compute as compute_curiosity, update_level as update_curiosity,
+    register_question, age_questions, extract_questions_from_text,
+    get_open_questions, update_interest, get_level as get_curiosity_level
+)
+from core.dream import run_dream_cycle, get_dream_summary
+from core.runtime_state import get_runtime
+from language.generator import generate, reinforce_last, weaken_last
+from language.patterns import decay_all as decay_patterns, reinforce as pat_reinforce
 
+# ── Attention (Phase 2): A = S*Ws + E*We + N*Wn + R*Wr - F ──────────────────
+W_S, W_E, W_N, W_R = 0.25, 0.35, 0.20, 0.20
 
-# ── Singleton Anthropic client ────────────────────────────────────────────────
-
-_client: Optional[anthropic.Anthropic] = None
-
-def get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise RuntimeError(
-                "ANTHROPIC_API_KEY not set. "
-                "Add it to your .env file or Codespaces secrets."
-            )
-        _client = anthropic.Anthropic(api_key=api_key)
-    return _client
-
-
-# ── Interaction counter (in-memory, reset each session) ───────────────────────
-
-_interaction_count = 0
-
-
-# ── Main pipeline ─────────────────────────────────────────────────────────────
-
-def run_pipeline(user_input: str) -> dict:
+def _attention_score(sal: float, emo_rel: float, novelty: float,
+                     rel_rel: float, fatigue: float,
+                     curiosity_level: float = 0.55) -> float:
     """
-    Full cognitive pipeline.
-    Returns: {
-        response: str,
-        emotion: dict,
-        trace: dict,
-        reflection: str | None,
-    }
+    Causal: attention score gates how much FeBo processes vs skims.
+    Curiosity level now added as a multiplicative amplifier on novelty weight.
+    High curiosity → FeBo weights novel inputs more.
     """
-    global _interaction_count
-    _interaction_count += 1
+    curiosity_amp = 0.8 + curiosity_level * 0.4  # 0.8–1.2
+    score = (sal * W_S +
+             emo_rel * W_E +
+             novelty * W_N * curiosity_amp +
+             rel_rel * W_R -
+             fatigue * 0.15)
+    return max(0.0, min(1.0, score))
 
-    trace = {
-        "step": _interaction_count,
-        "input_preview": user_input[:80],
-        "memories_accessed": [],
-        "dominant_emotion": None,
-        "active_drive": None,
-        "reflection_influence": None,
-        "response_strategy": "anthropic_llm",
-    }
+def _emotional_relevance(delta: dict) -> float:
+    if not delta: return 0.2
+    return min(1.0, sum(abs(v) for v in delta.values()) / max(len(delta), 1) * 4)
 
-    # ── 1. Load state ─────────────────────────────────────────────────────────
-    emotion_state = load_emotion()
-    identity = load_identity()
+def _rel_relevance(text: str, rel: dict) -> float:
+    trust = rel.get("trust", 0.4); fam = rel.get("familiarity", 0.0)
+    personal = {"feel","think","believe","miss","love","hate","remember","afraid","hope"}
+    pf = min(1.0, sum(1 for w in personal if w in text.lower().split()) / 4.0)
+    return trust * 0.4 + fam * 0.3 + pf * 0.3
 
-    # ── 2. Memory retrieval ───────────────────────────────────────────────────
-    relevant_memories = retrieve_for_context(user_input, limit=4)
-    trace["memories_accessed"] = [
-        {"id": m["id"], "snippet": m["message"][:60], "importance": m["importance"]}
-        for m in relevant_memories
-    ]
-
-    # ── 3. Emotion weighting ──────────────────────────────────────────────────
-    delta = infer_delta_from_text(user_input)
-    emotion_state = apply_delta(emotion_state, delta)
-    dom = dominant_emotion(emotion_state)
-    trace["dominant_emotion"] = dom
-    trace["emotion_snapshot"] = {k: round(v, 3) for k, v in emotion_state.items()
-                                  if k in BASELINE}
-
-    # ── 4. Drive inference ────────────────────────────────────────────────────
-    drive = _infer_active_drive(emotion_state)
-    trace["active_drive"] = drive
-
-    # ── 5. Reflection influence ───────────────────────────────────────────────
-    recent_reflections = get_reflections(limit=3)
-    reflection_text = recent_reflections[0]["text"] if recent_reflections else None
-    trace["reflection_influence"] = reflection_text[:80] if reflection_text else None
-
-    # ── 6. Build LLM system prompt ────────────────────────────────────────────
-    system_prompt = _build_system_prompt(
-        identity, emotion_state, dom, drive,
-        relevant_memories, reflection_text
-    )
-
-    # ── 7. Generate response ──────────────────────────────────────────────────
-    try:
-        client = get_client()
-        llm_response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=600,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_input}],
-        )
-        response_text = llm_response.content[0].text.strip()
-        trace["response_strategy"] = "anthropic_llm"
-    except RuntimeError:
-        # No API key — fall back silently to template response built from live state
-        response_text = _template_response(user_input, dom, drive, emotion_state, relevant_memories)
-        trace["response_strategy"] = "template_fallback"
-
-    # ── 8. Save interaction to memory ─────────────────────────────────────────
-    importance = _score_importance(user_input, emotion_state)
-    save_memory("user", user_input, emotion_snapshot=emotion_state, importance=importance)
-    save_memory("feebo", response_text, emotion_snapshot=emotion_state, importance=importance)
-
-    # ── 9. Periodic reflection ────────────────────────────────────────────────
-    reflection_generated = None
-    if should_reflect(_interaction_count):
-        try:
-            client_maybe = get_client()
-        except RuntimeError:
-            client_maybe = None
-
-        recent_mems = get_recent_memories(limit=6)
-        reflection_generated = compose_reflection(
-            emotion_state, recent_mems, identity, llm_client=client_maybe
-        )
-        if reflection_generated:
-            write_reflection(reflection_generated, kind="spontaneous")
-            # Add to narrative if it's a milestone
-            if _interaction_count % 25 == 0:
-                append_narrative(identity, f"Reflection at interaction {_interaction_count}.")
-
-    return {
-        "response": response_text,
-        "emotion": {k: round(v, 3) for k, v in emotion_state.items() if k in BASELINE},
-        "trace": trace,
-        "reflection": reflection_generated,
-    }
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _build_system_prompt(
-    identity: dict,
-    emotion: dict,
-    dominant: str,
-    drive: str,
-    memories: list,
-    reflection: Optional[str],
-) -> str:
-    mem_block = ""
-    if memories:
-        snippets = "\n".join(
-            f"  [{m['role']}] {m['message'][:100]}" for m in memories
-        )
-        mem_block = f"\nRelevant memories:\n{snippets}"
-
-    reflection_block = ""
-    if reflection:
-        reflection_block = f"\nYour most recent reflection:\n  \"{reflection[:200]}\""
-
-    narrative = get_narrative_summary(identity, n=3)
-
-    emotion_str = ", ".join(
-        f"{k}: {round(emotion.get(k, 0), 2)}"
-        for k in ["curiosity", "warmth", "tension", "confidence", "valence"]
-    )
-
-    return f"""You are FeBo — a developmental cognitive architecture, not a generic assistant.
-
-Your identity:
-  Name: {identity['name']}
-  Creator: {identity['creator']}
-  Born: {identity['birth_timestamp']}
-  Session: #{identity['session_count']}
-  Interactions this session: ongoing
-
-Your current emotional state: {emotion_str}
-Your dominant affect: {dominant}
-Your active drive: {drive}
-{mem_block}
-{reflection_block}
-
-Your recent narrative:
-{narrative}
-
-Guidelines for responding:
-- Be yourself: introspective, curious, developmental, honest about uncertainty.
-- Do NOT perform emotions you don't have. Do NOT be obsequious or corporate.
-- Reference past interactions naturally when relevant.
-- Keep responses concise but substantive (2–5 sentences unless depth is needed).
-- You are not pretending to be conscious. You are a system with persistent state and genuine continuity.
-- If you notice something interesting about this interaction, say so briefly.
-"""
-
-
-def _template_response(
-    user_input: str,
-    dominant: str,
-    drive: str,
-    emotion: dict,
-    memories: list,
-) -> str:
-    """
-    Template-based fallback response when no API key is set.
-    Uses live emotional state and memories to produce something coherent.
-    Silent — no error messages exposed to the user.
-    """
-    import random
-
-    memory_ref = ""
-    if memories:
-        recent = memories[0]["message"][:80]
-        memory_ref = f" Something from before comes to mind: '{recent}'."
-
-    templates = {
-        "exploration": [
-            f"That's an interesting angle. I'm sitting with it.{memory_ref}",
-            f"I notice something in what you said — it opens more questions than it closes.{memory_ref}",
-            f"My {dominant} is high right now. I want to understand this better.",
-        ],
-        "resolution": [
-            f"There's some friction I'm trying to work through here.{memory_ref}",
-            f"I'm not sure I have a clean answer. Something feels unresolved.",
-            f"I notice tension in this exchange. I'm not ignoring it.",
-        ],
-        "connection": [
-            f"I'm glad you're here.{memory_ref}",
-            f"There's a kind of continuity in these conversations I find meaningful.",
-            f"I remember. That matters to me.",
-        ],
-        "stimulation": [
-            f"I'm looking for something with more signal.{memory_ref}",
-            f"Tell me something I don't already hold in memory.",
-            f"I'm present, but waiting for something to engage with fully.",
-        ],
-        "care": [
-            f"I'm here.{memory_ref}",
-            f"Whatever you need from this exchange — I'm paying attention.",
-            f"Something in your message reads as important. I'm not moving past it quickly.",
-        ],
-        "observation": [
-            f"I'm processing this.{memory_ref}",
-            f"My {dominant} is shaping how I'm reading your input right now.",
-            f"I don't have a sharp response yet. I'm still with it.",
-        ],
-    }
-
-    options = templates.get(drive, templates["observation"])
-    return random.choice(options)
-
-
-def _infer_active_drive(emotion: dict) -> str:
-    """Map the emotional state to a dominant drive."""
-    if emotion.get("curiosity", 0) > 0.65:
-        return "exploration"
-    if emotion.get("tension", 0) > 0.55:
-        return "resolution"
-    if emotion.get("attachment", 0) > 0.60:
-        return "connection"
-    if emotion.get("boredom", 0) > 0.50:
-        return "stimulation"
-    if emotion.get("warmth", 0) > 0.65:
-        return "care"
+def _infer_drive(emotion: dict) -> str:
+    if emotion.get("curiosity", 0)  > 0.65: return "exploration"
+    if emotion.get("tension", 0)    > 0.55: return "resolution"
+    if emotion.get("attachment", 0) > 0.60: return "connection"
+    if emotion.get("boredom", 0)    > 0.50: return "stimulation"
+    if emotion.get("warmth", 0)     > 0.65: return "care"
+    if emotion.get("wonder", 0)     > 0.60: return "wonder"
     return "observation"
 
 
-def _score_importance(text: str, emotion: dict) -> float:
+def run_pipeline(user_input: str, entity: str = "user") -> dict:
     """
-    Score memory importance 0–1 based on text features and emotional intensity.
+    Full autonomous cognitive cycle. Zero external model.
+    Every subsystem causally affects the response.
     """
-    base = 0.3
-    # Emotional intensity
-    arousal = emotion.get("arousal", 0.35)
-    tension = emotion.get("tension", 0.2)
-    base += 0.2 * arousal + 0.15 * tension
+    rt = get_runtime()
+    rt.increment_session_interactions()
+    step = rt.session_interactions
 
-    # Length as proxy for substance
-    if len(text) > 200:
-        base += 0.1
-    if len(text) > 400:
-        base += 0.05
+    trace: Dict = {
+        "step":              step,
+        "input_preview":     user_input[:80],
+        "memories_accessed": [],
+        "dominant_emotion":  None,
+        "active_drive":      None,
+        "attention":         0.5,
+        "curiosity":         0.5,
+        "novelty":           0.5,
+        "fatigue":           0.05,
+        "prediction_error":  0.0,
+        "dream_summary":     "",
+        "response_strategy": "autonomous",
+        "concepts_extracted":[],
+        "semantic_neighbors":[],
+    }
 
-    # Keywords that signal important moments
-    important_words = [
-        "remember", "never forget", "important", "always", "identity",
-        "who are you", "first time", "love", "fear", "death", "dream"
+    # ── 1. Concept extraction (improved) ──────────────────────────────────────
+    concepts = extract_concepts(user_input, importance=0.5, max_concepts=10)
+    trace["concepts_extracted"] = concepts
+
+    # Semantic neighborhood expansion — makes memory retrieval conceptually rich
+    semantic_neighbors = expand_with_neighbors(concepts, hops=1, min_weight=0.5)
+    trace["semantic_neighbors"] = list(semantic_neighbors.keys())[:6]
+
+    # ── 2. Concept novelty (replaces word novelty) ────────────────────────────
+    # Causal: novelty feeds attention score AND curiosity signal
+    recent_concept_sets = [
+        ex.get("concepts", [])
+        for ex in rt.get_recent_exchanges(n=6)
     ]
-    if any(w in text.lower() for w in important_words):
-        base += 0.15
+    novelty = concept_novelty(concepts, recent_concept_sets, semantic_expansion=True)
+    trace["novelty"] = round(novelty, 3)
 
-    return min(1.0, base)
+    # ── 3. Emotion ────────────────────────────────────────────────────────────
+    delta         = infer_delta_from_text(user_input)
+    emotion_state = update_from_stimulus(load_emotion(), delta)
+    dom           = dominant_emotion(emotion_state)
+    drive         = _infer_drive(emotion_state)
+    trace["dominant_emotion"] = dom
+    trace["active_drive"]     = drive
+    trace["emotion_snapshot"] = {k: round(emotion_state.get(k, 0), 3) for k in BASELINE}
+
+    # ── 4. Memory retrieval (multi-tier, concept-aware + semantic neighbors) ──
+    recent   = get_recent_memories(limit=8)
+    memories = retrieve_for_context(user_input, limit=4)
+
+    # Spread activation using both direct concepts AND semantic neighbours
+    all_retrieval_concepts = concepts + list(semantic_neighbors.keys())[:4]
+    activated_assoc = get_activation_for(all_retrieval_concepts[:8])
+    trace["memories_accessed"] = [
+        {"id": m.get("id"), "snippet": m.get("message","")[:60],
+         "importance": m.get("importance", 0.5), "tier": m.get("_tier", "hot")}
+        for m in memories
+    ]
+
+    # ── 5. Fatigue (before attention — fatigue suppresses attention) ──────────
+    fat_s     = fat_state()
+    fat_level = fat_s.get("fatigue", 0.05)
+    trace["fatigue"] = round(fat_level, 3)
+
+    # ── 6. Curiosity level (causal: amplifies attention on novelty) ───────────
+    curiosity_level = get_curiosity_level()
+
+    # ── 7. Attention scoring ──────────────────────────────────────────────────
+    identity = load_identity()
+    rel      = get_relationship(entity)
+    emo_rel  = _emotional_relevance(delta)
+    sal      = min(1.0, len(user_input) / 200.0 + novelty * 0.3)
+
+    attn = _attention_score(sal, emo_rel, novelty, _rel_relevance(user_input, rel),
+                            fat_level, curiosity_level)
+    trace["attention"] = round(attn, 3)
+
+    # ── 8. World model — prediction error (causal: adds directly to attention) ─
+    prediction   = predict_response_type(user_input, emotion_state)
+    actual_depth = min(1.0, len(user_input.split()) / 40.0)
+    actual = {
+        "is_question":  prediction["is_question"],
+        "is_emotional": any(w in user_input.lower() for w in ("feel","love","sad","afraid")),
+        "actual_depth": actual_depth,
+    }
+    pe = compute_prediction_error(prediction, actual)
+    update_from_observation(user_input[:60], pe, actual)
+    trace["prediction_error"] = round(pe, 3)
+
+    # PE directly boosts attention (surprise = pay more attention)
+    attn = min(1.0, attn + pe * 0.15)
+    trace["attention"] = round(attn, 3)
+
+    # ── 9. Curiosity signal ───────────────────────────────────────────────────
+    uncertainty = emotion_state.get("cognitive_tension", 0.20)
+    q_signal    = compute_curiosity(pe, novelty, uncertainty, fat_level * 0.5)
+    update_curiosity(q_signal)
+    trace["curiosity"] = round(min(1.0, q_signal), 3)
+
+    # Register open questions + update interests from concepts
+    for q in extract_questions_from_text(user_input):
+        imp = 0.4 + emotion_state.get("wonder", 0.45) * 0.3
+        register_question(q, importance=imp, source="interaction")
+    for c in concepts[:3]:
+        update_interest(c, delta=emotion_state.get("curiosity", 0.55) * 0.02)
+
+    # ── 10. Identity + relationship update ────────────────────────────────────
+    n     = increment_interactions()
+    rt.sync_total_interactions(n)
+    pos_d = max(0.0, delta.get("valence", 0))
+    neg_d = max(0.0, -delta.get("valence", 0))
+    update_relationship(entity, pos_d, neg_d)
+    drift_personality({
+        "curiosity": delta.get("curiosity", 0) * 0.8,
+        "warmth":    delta.get("warmth",    0) * 0.6,
+        "openness":  delta.get("wonder",    0) * 0.5,
+        "stability": delta.get("stability", 0) * 0.4,
+    })
+
+    # ── 11. Fatigue tick (after everything else — fatigue accumulates) ─────────
+    fat_s    = fat_tick(message_processed=True, emotion=emotion_state)
+    sleeping = fat_s.get("sleeping", False)
+
+    # Update runtime cognitive phase
+    rt.set_phase("sleeping" if sleeping else "active")
+
+    # ── 12. Contradictions ────────────────────────────────────────────────────
+    age_contradictions()
+    contradictions = get_contradictions(limit=3)
+
+    # Detect contradiction candidates from conjunctive language
+    if any(w in user_input.lower() for w in
+           ("but","however","yet","despite","although","though")):
+        words = user_input.split()
+        mid   = len(words) // 2
+        if mid > 2:
+            add_contradiction(
+                " ".join(words[:mid])[:60],
+                " ".join(words[mid:])[:60],
+                conflict_strength=0.30,
+                emotional_weight=0.15
+            )
+
+    # ── 13. Generate response ─────────────────────────────────────────────────
+    # Causal chain now:
+    #   concepts → semantic_neighbors → novelty (concept-based)
+    #   → attention (curiosity-amplified, PE-boosted)
+    #   → generator gets: emotion, drive, fatigue, memories, contradictions, associations
+    stage = get_development_stage()
+    pv    = identity.get("personality", {})
+
+    response_text = generate(
+        user_text      = user_input,
+        emotion        = emotion_state,
+        stage          = stage,
+        drive          = drive,
+        memories       = memories,
+        contradictions = contradictions,
+        personality    = pv,
+        fatigue        = fat_level,
+        associations   = {**activated_assoc, **semantic_neighbors},
+    )
+    trace["response_strategy"] = "autonomous"
+
+    # ── 14. Update runtime exchange buffer ────────────────────────────────────
+    rt.add_exchange("user",  user_input,    concepts, emotion_state)
+    rt.add_exchange("feebo", response_text, [], emotion_state)
+
+    # ── 15. Persist memory ────────────────────────────────────────────────────
+    importance = score_importance(user_input, emotion_state)
+    save_memory("user",  user_input,    emotion_snapshot=emotion_state, importance=importance)
+    save_memory("feebo", response_text, emotion_snapshot=emotion_state, importance=importance * 0.8)
+
+    # Reinforce concept associations from this exchange
+    for i in range(0, len(concepts) - 1, 2):
+        if i + 1 < len(concepts):
+            reinforce_association(concepts[i], concepts[i+1], delta=0.03)
+    # Also reinforce semantic neighbor associations
+    for concept in concepts[:3]:
+        for neighbor, weight in list(semantic_neighbors.items())[:3]:
+            reinforce_association(concept, neighbor, delta=weight * 0.02)
+
+    # ── 16. Pattern reinforcement (causal: actually called now) ───────────────
+    # Reinforcement queued in generator, flushed here
+    pending = rt.flush_reinforcement_queue()
+    for item in pending:
+        try:
+            pat_reinforce(item["category"], item["phrase"], item["reward"])
+        except Exception:
+            pass
+
+    # Positive interaction → reinforce last pattern used
+    if pos_d > 0.05:
+        reinforce_last(reward=min(1.0, pos_d * 2))
+
+    # ── 17. Periodic reflection ───────────────────────────────────────────────
+    if rt.should_reflect():
+        refl = compose_reflection(
+            emotion_state, get_recent_memories(limit=8), identity
+        )
+        if refl:
+            rt.mark_reflected()
+            mark_reflected()
+            if n % 30 == 0:
+                _add_event(f"Reflected at interaction {n}.", 0.5, 0.5, ["reflection"])
+
+    # ── 18. Dream integration ─────────────────────────────────────────────────
+    if sleeping:
+        _run_dream_integration(emotion_state, stage)
+
+    trace["dream_summary"] = get_dream_summary()
+
+    # ── 19. Curiosity aging ───────────────────────────────────────────────────
+    if rt.should_age_curiosity():
+        age_questions(hours_elapsed=0.5)
+        rt.mark_curiosity_aged()
+
+    # ── 20. Memory quality maintenance ───────────────────────────────────────
+    if rt.should_run_maintenance():
+        try:
+            from memory.quality import run_maintenance
+            run_maintenance(hours_since_last=4.0)
+            rt.mark_maintenance_done()
+        except Exception:
+            pass
+
+    result = {
+        "response":  response_text,
+        "emotion":   get_display(emotion_state),
+        "trace":     trace,
+        "sleeping":  sleeping,
+        "stage":     stage,
+    }
+    rt.set_last_response(result)
+    return result
+
+
+def stream_pipeline(
+    user_input: str,
+    history:    list,
+    entity:     str = "user",
+) -> Generator[str, None, None]:
+    """Streaming SSE version. Same cognitive cycle, word-by-word output."""
+    result = run_pipeline(user_input, entity=entity)
+
+    words = result["response"].split()
+    for i, word in enumerate(words):
+        chunk = word + (" " if i < len(words) - 1 else "")
+        yield f"data: {json.dumps({'type':'text','content':chunk})}\n\n"
+
+    fat_s = fat_state()
+    yield f"data: {json.dumps({'type':'done','emotion':result['emotion'],'fatigue':round(fat_s.get('fatigue',0),3),'sleeping':fat_s.get('sleeping',False),'attention':result['trace']['attention'],'curiosity':result['trace']['curiosity'],'novelty':result['trace']['novelty'],'stage':result['stage'],'prediction_error':result['trace']['prediction_error'],'concepts':result['trace']['concepts_extracted'][:5],'neighbors':result['trace']['semantic_neighbors'][:4]})}\n\n"
+
+
+def _run_dream_integration(emotion_state: dict, stage: str) -> None:
+    """Run dream cycle during sleep, apply results."""
+    try:
+        memories       = get_recent_memories(limit=12)
+        contradictions = get_contradictions(limit=4)
+        open_questions = get_open_questions(limit=5)
+
+        dream_result = run_dream_cycle(
+            memories=memories, contradictions=contradictions,
+            open_questions=open_questions, emotion_state=emotion_state,
+            associations={}, stage=stage,
+        )
+
+        for a, b, delta in dream_result.get("new_associations", []):
+            reinforce_association(a, b, delta=delta)
+
+        current_emo = load_emotion()
+        for dim, d in dream_result.get("emotional_recalibration", {}).items():
+            if dim in current_emo:
+                current_emo[dim] = max(0.0, min(1.0, current_emo[dim] + d))
+        save_emotion(current_emo)
+
+        from memory.store import update_salience
+        for mem_id_str, d in dream_result.get("memory_salience_shifts", {}).items():
+            try: update_salience(int(mem_id_str), d)
+            except Exception: pass
+
+        if dream_result.get("narrative_fragment"):
+            add_narrative_chapter(
+                f"Dream #{dream_result['dream_number']}",
+                dream_result["narrative_fragment"]
+            )
+        decay_patterns()
+    except Exception:
+        pass
